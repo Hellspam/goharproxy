@@ -1,6 +1,6 @@
 go-selenium-proxy
 =================
-Alternative to [browsermob-proxy[(https://github.com/lightbody/browsermob-proxy) written in go.
+Alternative to [browsermob-proxy](https://github.com/lightbody/browsermob-proxy) written in go.
 
 
 Eventually should have these features as a base to start using it from:
