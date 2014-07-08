@@ -31,12 +31,13 @@ func main() {
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		before = time.Now()
 		harRequest := har.ParseRequest(req)
-		fmt.Printf("Request: %v\n" , harRequest.String())
+		fmt.Printf("Request: %v\n" , harRequest)
 		return req, nil
 	})
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		after = time.Now()
-//		fmt.Printf("Total time %v %v: %v\n", before, after, after.Sub(before))
+		harResponse := har.ParseResponse(resp)
+		fmt.Printf("Response: %v\n" , harResponse)
 		return resp
 	})
 	l, err := net.Listen("tcp", ":9999")

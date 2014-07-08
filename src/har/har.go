@@ -52,26 +52,29 @@ type HarRequest struct {
 var captureContent bool = true
 
 func ParseRequest(req *http.Request) *HarRequest {
-
+	if req == nil {
+		return nil
+	}
+	copyReq := *req
 	harRequest := HarRequest {
-		Method 		: req.Method,
-		Url    		: req.URL.String(),
-		HttpVersion : req.Proto,
-		Cookies 	: parseCookies(req.Cookies()),
-		Headers		: parseStringArrMap(req.Header),
-		QueryString : parseStringArrMap((req.URL.Query())),
-		BodySize	: req.ContentLength,
+		Method 		: copyReq.Method,
+		Url    		: copyReq.URL.String(),
+		HttpVersion : copyReq.Proto,
+		Cookies 	: parseCookies(copyReq.Cookies()),
+		Headers		: parseStringArrMap(copyReq.Header),
+		QueryString : parseStringArrMap((copyReq.URL.Query())),
+		BodySize	: copyReq.ContentLength,
 		HeadersSize : -1,
 	}
 
-	if captureContent && harRequest.Method == "POST" {
-		harRequest.PostData = *parsePostData(req)
+	if captureContent && (harRequest.Method == "POST" || harRequest.Method == "PUT") {
+		harRequest.PostData = parsePostData(&copyReq)
 	}
 
 	return &harRequest
 }
 
-func parsePostData(req *http.Request) *HarPostData {
+func parsePostData(req *http.Request) HarPostData {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Printf("Error parsing request to %v: %v\n", req.URL, e)
@@ -107,7 +110,7 @@ func parsePostData(req *http.Request) *HarPostData {
 		}
 		harPostData.Text = string(body)
 	}
-	return harPostData
+	return *harPostData
 }
 
 
@@ -160,6 +163,33 @@ type HarResponse struct {
 	RedirectUrl        string				`json:"redirectUrl"`
 	BodySize           int64				`json:"bodySize"`
 	HeadersSize        int64				`json:"headersSize"`
+}
+
+func ParseResponse(resp *http.Response) *HarResponse {
+	if resp == nil {
+		return nil
+	}
+	harResponse := HarResponse {
+		Status			: resp.StatusCode,
+		StatusText		: resp.Status,
+		HttpVersion		: resp.Proto,
+		Cookies			: parseCookies(resp.Cookies()),
+		Headers			: parseStringArrMap(resp.Header),
+		RedirectUrl		: "",
+		BodySize		: resp.ContentLength,
+		HeadersSize		: -1,
+	}
+
+	if captureContent {
+
+	}
+
+	return &harResponse
+}
+
+func (hr *HarResponse) String() string {
+	str, _ := json.MarshalIndent(hr, "", "\t")
+	return string(str)
 }
 
 type HarCookie struct {
