@@ -36,7 +36,7 @@ func main() {
 	})
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		after = time.Now()
-		fmt.Printf("Total time %v %v: %v\n", before, after, after.Sub(before))
+//		fmt.Printf("Total time %v %v: %v\n", before, after, after.Sub(before))
 		return resp
 	})
 	l, err := net.Listen("tcp", ":9999")
