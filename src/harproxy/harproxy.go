@@ -1,4 +1,4 @@
-package main
+package harproxy
 
 import (
 	"fmt"
@@ -18,6 +18,18 @@ import (
 	"strconv"
 )
 
+type HarProxy struct {
+	// Our go proxy
+	Proxy *goproxy.ProxyHttpServer
+
+	// Our port
+	Port int
+
+	// Our HAR
+	Entries []har.HarEntry
+}
+
+
 type stoppableListener struct {
 	net.Listener
 	sync.WaitGroup
@@ -27,24 +39,23 @@ func newStoppableListener(l net.Listener) *stoppableListener {
 	return &stoppableListener{l, sync.WaitGroup{}}
 }
 
-func orPanic(err error) {
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
+func NewHarProxy(port int) *HarProxy {
+	harEntries := make([]har.HarEntry, 0, 100000)
+	harProxy := HarProxy {
+		Proxy : createProxy(harEntries),
+		Port : port,
+		Entries: harEntries,
 	}
+	return &harProxy
 }
 
-func main() {
-	createProxy(9999)
-}
-
-func createProxy(port int) {
+func createProxy(harEntries []har.HarEntry) *goproxy.ProxyHttpServer{
 	proxy := goproxy.NewProxyHttpServer()
 	var before time.Time
 	var after time.Time
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	printed := false
-	harEntries := make([]har.HarEntry, 0, 100000)
+
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		harEntry := new(har.HarEntry)
 		harEntry.StartedDateTime = time.Now()
@@ -69,8 +80,11 @@ func createProxy(port int) {
 
 		return req, nil
 	})
+	return proxy
+}
 
-	l, err := net.Listen("tcp", ":" + strconv.Itoa(port))
+func (proxy *HarProxy) Start() {
+	l, err := net.Listen("tcp", ":" + strconv.Itoa(proxy.Port))
 	if err != nil {
 		log.Fatal("listen:", err)
 	}
@@ -84,11 +98,12 @@ func createProxy(port int) {
 		sl.Close()
 		sl.Done()
 	}()
-	log.Printf("Starting Proxy on port %v\n", port)
-	http.Serve(sl, proxy)
+	log.Printf("Starting Proxy on port %v\n", proxy.Port)
+	http.Serve(sl, proxy.Proxy)
 	sl.Wait()
 	log.Println("All connections closed - exit")
-	for _, v := range harEntries {
+	for _, v := range proxy.Entries {
 		fmt.Printf("Entry\n: %v\n", v.String())
 	}
 }
+
