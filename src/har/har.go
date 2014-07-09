@@ -53,31 +53,30 @@ type HarRequest struct {
 	Cookies        []HarCookie			`json:"cookies"`
 	Headers        []HarNameValuePair	`json:"headers"`
 	QueryString    []HarNameValuePair	`json:"queryString"`
-	PostData       HarPostData			`json:"postData"`
+	PostData       *HarPostData			`json:"postData"`
 	BodySize       int64				`json:"bodySize"`
 	HeadersSize    int64				`json:"headersSize"`
 }
 
-var captureContent bool = true
+var captureContent bool = false
 
 func ParseRequest(req *http.Request) *HarRequest {
 	if req == nil {
 		return nil
 	}
-	copyReq := *req
 	harRequest := HarRequest {
-		Method 		: copyReq.Method,
-		Url    		: copyReq.URL.String(),
-		HttpVersion : copyReq.Proto,
-		Cookies 	: parseCookies(copyReq.Cookies()),
-		Headers		: parseStringArrMap(copyReq.Header),
-		QueryString : parseStringArrMap((copyReq.URL.Query())),
-		BodySize	: copyReq.ContentLength,
-		HeadersSize : calcHeaderSize(copyReq.Header),
+		Method 		: req.Method,
+		Url    		: req.URL.String(),
+		HttpVersion : req.Proto,
+		Cookies 	: parseCookies(req.Cookies()),
+		Headers		: parseStringArrMap(req.Header),
+		QueryString : parseStringArrMap((req.URL.Query())),
+		BodySize	: req.ContentLength,
+		HeadersSize : calcHeaderSize(req.Header),
 	}
 
-	if captureContent && (harRequest.Method == "POST" || harRequest.Method == "PUT") {
-		harRequest.PostData = parsePostData(&copyReq)
+	if captureContent && (req.Method == "POST" || req.Method == "PUT") {
+		harRequest.PostData = parsePostData(req)
 	}
 
 	return &harRequest
@@ -94,12 +93,14 @@ func calcHeaderSize(header http.Header) int64 {
 	return int64(headerSize)
 }
 
-func parsePostData(req *http.Request) HarPostData {
+func parsePostData(req *http.Request) *HarPostData {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Printf("Error parsing request to %v: %v\n", req.URL, e)
 		}
 	}()
+	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferLen))
+	io.Copy(buffer, req.Body)
 	e := req.ParseForm()
 	if e != nil {
 		panic(e)
@@ -130,7 +131,8 @@ func parsePostData(req *http.Request) HarPostData {
 		}
 		harPostData.Text = string(body)
 	}
-	return *harPostData
+	req.Body = ioutil.NopCloser(buffer)
+	return harPostData
 }
 
 
@@ -179,7 +181,7 @@ type HarResponse struct {
 	HttpVersion        string				`json:"httpVersion`
 	Cookies            []HarCookie			`json:"cookies"`
 	Headers            []HarNameValuePair	`json:"headers"`
-	Content            HarContent			`json:"content"`
+	Content            *HarContent			`json:"content"`
 	RedirectUrl        string				`json:"redirectUrl"`
 	BodySize           int64				`json:"bodySize"`
 	HeadersSize        int64				`json:"headersSize"`
@@ -208,14 +210,25 @@ func ParseResponse(resp *http.Response) *HarResponse {
 	return &harResponse
 }
 
-func parseContent(resp *http.Response) HarContent{
+func parseContent(resp *http.Response) *HarContent{
+	defer func() {
+		if e := recover(); e != nil {
+			log.Printf("Error parsing response to %v: %v\n", resp.Request.URL, e)
+		}
+	}()
+
+	harContent := new(HarContent)
+	contentType := resp.Header["Content-Type"]
+	if contentType == nil {
+		panic("Missing content type in response")
+	}
+	harContent.MimeType = contentType[0]
+
 	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferLen))
 	io.Copy(buffer, resp.Body)
 	body, _ := ioutil.ReadAll(resp.Body)
 
-	harContent := HarContent {
-		Text : string(body),
-	}
+	harContent.Text = string(body)
 	resp.Body = ioutil.NopCloser(buffer)
 	return harContent
 }
