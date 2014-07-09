@@ -8,7 +8,11 @@ import (
 	"strings"
 	"log"
 	"io/ioutil"
+	"io"
+	"bytes"
 )
+
+var maxBufferLen int = 10485760
 
 type Har struct {
 	HarLog HarLog	`json:"harLog"`
@@ -30,11 +34,16 @@ type HarEntry struct {
 	PageRef         string			`json:"pageRef"`
 	StartedDateTime time.Time		`json:"startedDateTime"`
 	Time            int64			`json:"time"`
-	Request         HarRequest		`json:"request"`
-	Response        HarResponse		`json:"response"`
+	Request         *HarRequest		`json:"request"`
+	Response        *HarResponse	`json:"response"`
 	Timings         HarTimings		`json:"timings"`
 	ServerIpAddress string			`json:"serverIpAddress"`
 	Connection      string			`json:"connection"`
+}
+
+func (hr *HarEntry) String() string {
+	str, _ := json.MarshalIndent(hr, "", "\t")
+	return string(str)
 }
 
 type HarRequest struct {
@@ -64,7 +73,7 @@ func ParseRequest(req *http.Request) *HarRequest {
 		Headers		: parseStringArrMap(copyReq.Header),
 		QueryString : parseStringArrMap((copyReq.URL.Query())),
 		BodySize	: copyReq.ContentLength,
-		HeadersSize : -1,
+		HeadersSize : calcHeaderSize(copyReq.Header),
 	}
 
 	if captureContent && (harRequest.Method == "POST" || harRequest.Method == "PUT") {
@@ -72,6 +81,17 @@ func ParseRequest(req *http.Request) *HarRequest {
 	}
 
 	return &harRequest
+}
+
+func calcHeaderSize(header http.Header) int64 {
+	headerSize := 0
+	for headerName, headerValues := range header {
+		headerSize += len(headerName)
+		for _, v := range headerValues {
+			headerSize += len(v)
+		}
+	}
+	return int64(headerSize)
 }
 
 func parsePostData(req *http.Request) HarPostData {
@@ -169,6 +189,7 @@ func ParseResponse(resp *http.Response) *HarResponse {
 	if resp == nil {
 		return nil
 	}
+
 	harResponse := HarResponse {
 		Status			: resp.StatusCode,
 		StatusText		: resp.Status,
@@ -177,14 +198,26 @@ func ParseResponse(resp *http.Response) *HarResponse {
 		Headers			: parseStringArrMap(resp.Header),
 		RedirectUrl		: "",
 		BodySize		: resp.ContentLength,
-		HeadersSize		: -1,
+		HeadersSize		: calcHeaderSize(resp.Header),
 	}
 
 	if captureContent {
-
+		harResponse.Content = parseContent(resp)
 	}
 
 	return &harResponse
+}
+
+func parseContent(resp *http.Response) HarContent{
+	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferLen))
+	io.Copy(buffer, resp.Body)
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	harContent := HarContent {
+		Text : string(body),
+	}
+	resp.Body = ioutil.NopCloser(buffer)
+	return harContent
 }
 
 func (hr *HarResponse) String() string {
