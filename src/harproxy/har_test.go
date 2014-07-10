@@ -1,4 +1,4 @@
-package har
+package harproxy
 
 import (
 	"testing"

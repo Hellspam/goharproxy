@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sync"
 	"log"
-	"har"
 	"time"
 	"strconv"
 	"io"
@@ -29,7 +28,7 @@ type HarProxy struct {
 	Port int
 
 	// Our HAR entries channel
-	Entries []har.HarEntry
+	Entries []HarEntry
 
 	// Stoppable listner - used to stop http proxy
 	StoppableListener *stoppableListener
@@ -67,27 +66,27 @@ func NewHarProxyWithPort(port int) *HarProxy {
 	return &harProxy
 }
 
-func makeNewEntries() []har.HarEntry {
-	return make([]har.HarEntry, 0, 100000)
+func makeNewEntries() []HarEntry {
+	return make([]HarEntry, 0, 100000)
 }
 
 func createProxy(proxy *HarProxy) {
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	proxy.Proxy.Verbose = true
 	proxy.Proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		harEntry := new(har.HarEntry)
+		harEntry := new(HarEntry)
 		harEntry.StartedDateTime = time.Now()
 		before := time.Now()
 		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
 			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
-			harResponse := har.ParseResponse(resp)
+			harResponse := ParseResponse(resp)
 			harEntry.Response = harResponse
 			after := time.Now()
 			harEntry.Time = after.Sub(before).Nanoseconds() / 1e6
 			proxy.Entries = append(proxy.Entries, *harEntry)
 			return
 		})
-		harRequest := har.ParseRequest(req)
+		harRequest := ParseRequest(req)
 		harEntry.Request = harRequest
 		if ip, _, err := net.ParseCIDR(req.URL.Host); err == nil {
 			harEntry.ServerIpAddress = string(ip)
