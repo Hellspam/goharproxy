@@ -75,7 +75,7 @@ func getTestSendRequest(method string, t *testing.T) (*http.Request, *HarRequest
 		Method 		: method,
 		Url    		: "http://google.com",
 		BodySize 	: (int64)(len(data.Encode())),
-		PostData	: harPostData,
+		PostData	: &harPostData,
 	}
 
 	return req, &expectedReq
