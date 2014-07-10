@@ -9,7 +9,6 @@ import (
 	"time"
 	"strconv"
 	"io"
-	"bytes"
 	"strings"
 	"regexp"
 	"fmt"
@@ -127,11 +126,8 @@ func (proxy *HarProxy) ClearEntries() {
 }
 
 func (proxy *HarProxy) NewHarReader() io.Reader {
-	var buffer bytes.Buffer
-	for _, entry := range proxy.Entries {
-		buffer.WriteString(entry.String())
-	}
-	return strings.NewReader(buffer.String())
+	str, _ := json.Marshal(proxy.Entries)
+	return strings.NewReader(string(str))
 }
 
 //
@@ -175,7 +171,6 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		harProxy = portAndProxy[port]
 		log.Printf("PORT:[%v]\n", port)
 	}
-	log.Printf("%v", strings.HasSuffix(path, "har"))
 	switch {
 	case path == "" && method == "POST":
 		log.Println("MATCH CREATE")
@@ -203,8 +198,9 @@ func deleteHarProxy(port int, w http.ResponseWriter) {
 func getHarEntries(harProxy *HarProxy, w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/json")
+	entryLen := len(harProxy.Entries)
 	json.NewEncoder(w).Encode(harProxy.Entries)
-	log.Println("Wrote entries")
+	log.Printf("Wrote %v entries", entryLen)
 	harProxy.ClearEntries()
 
 }
