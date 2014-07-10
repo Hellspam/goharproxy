@@ -2,6 +2,7 @@ go-selenium-proxy
 =================
 Alternative to [browsermob-proxy](https://github.com/lightbody/browsermob-proxy) written in go.
 
+[![Build Status](https://travis-ci.org/Hellspam/go-selenium-proxy.svg?branch=master)](https://travis-ci.org/Hellspam/go-selenium-proxy)
 
 Eventually should have these features as a base to start using it from:
 - Create new proxies
