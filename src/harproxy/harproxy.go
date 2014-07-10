@@ -13,8 +13,6 @@ import (
 	"github.com/elazarl/goproxy/transport"
 
 	"time"
-	"os"
-	"os/signal"
 	"strconv"
 )
 
@@ -25,8 +23,11 @@ type HarProxy struct {
 	// Our port
 	Port int
 
-	// Our HAR
+	// Our HAR entries channel
 	Entries []har.HarEntry
+
+	// Stoppable listner - used to stop http proxy
+	StoppableListener *stoppableListener
 }
 
 
@@ -42,37 +43,29 @@ func newStoppableListener(l net.Listener) *stoppableListener {
 func NewHarProxy(port int) *HarProxy {
 	harEntries := make([]har.HarEntry, 0, 100000)
 	harProxy := HarProxy {
-		Proxy : createProxy(harEntries),
+		Proxy : goproxy.NewProxyHttpServer(),
 		Port : port,
 		Entries: harEntries,
 	}
 	return &harProxy
 }
 
-func createProxy(harEntries []har.HarEntry) *goproxy.ProxyHttpServer{
-	proxy := goproxy.NewProxyHttpServer()
-	var before time.Time
-	var after time.Time
+func createProxy(proxy *HarProxy) {
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
-	printed := false
-
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	proxy.Proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		harEntry := new(har.HarEntry)
 		harEntry.StartedDateTime = time.Now()
+		before := time.Now()
 		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
 			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
+			fmt.Println("Doing stuff")
 			harResponse := har.ParseResponse(resp)
 			harEntry.Response = harResponse
-			after = time.Now()
+			after := time.Now()
 			harEntry.Time = after.Sub(before).Nanoseconds() / 1e6
-			if !printed {
-				fmt.Printf("Entry\n: %v\n", harEntry.String())
-				printed = true
-			}
-			harEntries = append(harEntries, *harEntry)
+			proxy.Entries = append(proxy.Entries, *harEntry)
 			return
 		})
-		before = time.Now()
 		harRequest := har.ParseRequest(req)
 		harEntry.Request = harRequest
 		ipaddr, _ := net.LookupIP(req.URL.Host)
@@ -80,30 +73,30 @@ func createProxy(harEntries []har.HarEntry) *goproxy.ProxyHttpServer{
 
 		return req, nil
 	})
-	return proxy
 }
 
 func (proxy *HarProxy) Start() {
+	createProxy(proxy)
 	l, err := net.Listen("tcp", ":" + strconv.Itoa(proxy.Port))
 	if err != nil {
 		log.Fatal("listen:", err)
 	}
-	sl := newStoppableListener(l)
-	ch := make(chan os.Signal)
-	signal.Notify(ch, os.Interrupt)
-	go func() {
-		<-ch
-		log.Println("Got SIGINT exiting")
-		sl.Add(1)
-		sl.Close()
-		sl.Done()
-	}()
-	log.Printf("Starting Proxy on port %v\n", proxy.Port)
-	http.Serve(sl, proxy.Proxy)
-	sl.Wait()
-	log.Println("All connections closed - exit")
-	for _, v := range proxy.Entries {
-		fmt.Printf("Entry\n: %v\n", v.String())
+	proxy.StoppableListener = newStoppableListener(l)
+	log.Printf("Starting harproxy server on port :%v", proxy.Port)
+	http.Serve(proxy.StoppableListener, proxy.Proxy)
+	proxy.StoppableListener.Wait()
+}
+
+func (proxy *HarProxy) Stop() {
+	log.Printf("Stopping harproxy server on port :%v", proxy.Port)
+	proxy.StoppableListener.Add(1)
+	proxy.StoppableListener.Close()
+	proxy.StoppableListener.Done()
+}
+
+func (proxy *HarProxy) PrintEntries() {
+	for _, entry := range proxy.Entries {
+		fmt.Printf("Entry\n: %v\n", entry.Request.Url)
 	}
 }
 
