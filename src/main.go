@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/hellspam/go-selenium-proxy/src/harproxy"
+	"harproxy"
 	"log"
 	"net/http"
 )
