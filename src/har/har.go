@@ -85,7 +85,7 @@ func ParseRequest(req *http.Request) *HarRequest {
 func calcHeaderSize(header http.Header) int64 {
 	headerSize := 0
 	for headerName, headerValues := range header {
-		headerSize += len(headerName)
+		headerSize += len(headerName) + 2
 		for _, v := range headerValues {
 			headerSize += len(v)
 		}

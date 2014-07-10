@@ -2,16 +2,17 @@ package main
 
 import (
 	"harproxy"
-	"time"
+	"log"
+	"net/http"
 )
+import _ "net/http/pprof"
 
 
 func main() {
-	harProxy := harproxy.NewHarProxy(9999)
-	go func() {harProxy.Start()}()
-	time.Sleep(5 * time.Second)
-	harProxy.Stop()
-	harProxy.PrintEntries()
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	harproxy.NewProxyServer(8080)
 }
 
 
