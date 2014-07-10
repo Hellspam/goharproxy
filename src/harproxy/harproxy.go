@@ -6,17 +6,21 @@ import (
 	"sync"
 	"log"
 	"har"
-
-
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/transport"
-
 	"time"
 	"strconv"
 	"io"
 	"bytes"
 	"strings"
+	"regexp"
+	"fmt"
+
+
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/transport"
+	"encoding/json"
 )
+
+// HarProxy
 
 type HarProxy struct {
 	// Our go proxy
@@ -60,6 +64,7 @@ func NewHarProxyWithPort(port int) *HarProxy {
 		Port : port,
 		Entries: makeNewEntries(),
 	}
+	createProxy(&harProxy)
 	return &harProxy
 }
 
@@ -85,15 +90,20 @@ func createProxy(proxy *HarProxy) {
 		})
 		harRequest := har.ParseRequest(req)
 		harEntry.Request = harRequest
-		ipaddr, _ := net.LookupIP(req.URL.Host)
-		harEntry.ServerIpAddress = ipaddr[0].String()
+		if ip, _, err := net.ParseCIDR(req.URL.Host); err == nil {
+			harEntry.ServerIpAddress = string(ip)
+		}
+
+		if ipaddr, err := net.LookupIP(req.URL.Host); err == nil {
+			harEntry.ServerIpAddress = ipaddr[0].String()
+		}
+
 
 		return req, nil
 	})
 }
 
 func (proxy *HarProxy) Start() {
-	createProxy(proxy)
 	l, err := net.Listen("tcp", ":" + strconv.Itoa(proxy.Port))
 	if err != nil {
 		log.Fatal("listen:", err)
@@ -124,3 +134,102 @@ func (proxy *HarProxy) NewHarReader() io.Reader {
 	return strings.NewReader(buffer.String())
 }
 
+//
+
+// HarProxyServer
+
+var portAndProxy map[int]*HarProxy = make(map[int]*HarProxy, 5000)
+
+var portPathRegex *regexp.Regexp = regexp.MustCompile("/(\\d*)(/.*)?")
+
+type ProxyServerPort struct {
+	Port int   `json:"port"`
+}
+
+type ProxyServerErr struct {
+	Error string	`json:"error"`
+}
+
+func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path[len("/proxy"):]
+	method := r.Method
+
+	log.Printf("PATH:[%v]\n", r.URL.Path)
+	log.Printf("FILTERED:[%v]\n", path)
+	log.Printf("METHOD:[%v]\n", method)
+	var harProxy *HarProxy
+	var port int
+	if portPathRegex.MatchString(path) {
+		portStr := portPathRegex.FindStringSubmatch(path)[1]
+		port, _ = strconv.Atoi(portStr)
+		if portAndProxy[port] == nil {
+			w.WriteHeader(http.StatusNotFound)
+			errMsg := fmt.Sprintf("No such port:[%v]", port)
+			log.Printf(errMsg)
+			err := ProxyServerErr {
+				Error : errMsg,
+			}
+			json.NewEncoder(w).Encode(&err)
+			return
+		}
+		harProxy = portAndProxy[port]
+		log.Printf("PORT:[%v]\n", port)
+	}
+	log.Printf("%v", strings.HasSuffix(path, "har"))
+	switch {
+	case path == "" && method == "POST":
+		log.Println("MATCH CREATE")
+		createNewHarProxy(w)
+	case strings.HasSuffix(path, "har") && method == "PUT":
+		log.Println("MATCH PRINT")
+		getHarEntries(harProxy, w)
+	case portPathRegex.MatchString(path) && method == "DELETE":
+		log.Println("MATCH DELETE")
+		deleteHarProxy(port, w)
+	}
+
+}
+
+func deleteHarProxy(port int, w http.ResponseWriter) {
+	log.Printf("Deleting proxy on port :%v\n", port)
+	harProxy := portAndProxy[port]
+	harProxy.Stop()
+	delete(portAndProxy, port)
+	harProxy = nil
+	w.WriteHeader(http.StatusOK)
+
+}
+
+func getHarEntries(harProxy *HarProxy, w http.ResponseWriter) {
+	w.WriteHeader(http.StatusOK)
+	w.Header().Add("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(harProxy.Entries)
+	log.Println("Wrote entries")
+	harProxy.ClearEntries()
+
+}
+
+func createNewHarProxy(w http.ResponseWriter) {
+	log.Printf("Got request to start new proxy\n")
+	harProxy := NewHarProxy()
+	harProxy.Start()
+	port := GetPort(harProxy.StoppableListener.Listener)
+	harProxy.Port = port
+
+	portAndProxy[port] = harProxy
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	proxyServerPort := ProxyServerPort {
+		Port : port,
+	}
+	json.NewEncoder(w).Encode(&proxyServerPort)
+}
+
+
+func NewProxyServer(port int) {
+	http.HandleFunc("/proxy", proxyHandler)
+	http.HandleFunc("/proxy/", proxyHandler)
+	log.Printf("Started HAR Proxy server on port :%v, Waiting for proxy start request\n", port)
+	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(port), nil))
+}
