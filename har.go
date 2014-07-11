@@ -130,10 +130,6 @@ func parsePostData(req *http.Request) *HarPostData {
 
 	buffer := bytes.NewBuffer(make([]byte, 0, req.ContentLength))
 	io.Copy(buffer, req.Body)
-	e := req.ParseForm()
-	if e != nil {
-		panic(e)
-	}
 	harPostData := new(HarPostData)
 	contentType := req.Header["Content-Type"]
 	if contentType == nil {
@@ -154,11 +150,7 @@ func parsePostData(req *http.Request) *HarPostData {
 		}
 		harPostData.Params = params
 	} else {
-		body, e := ioutil.ReadAll(req.Body)
-		if e != nil {
-			panic(e)
-		}
-		harPostData.Text = string(body)
+		harPostData.Text = string(buffer.Bytes())
 	}
 	req.Body = ioutil.NopCloser(buffer)
 	return harPostData

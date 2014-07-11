@@ -78,13 +78,28 @@ func TestParseHttpPUTRequest (t *testing.T) {
 	}
 }
 
+func TestParsePostDataRaw(t *testing.T) {
+	testString := "BLA"
+	req, err := http.NewRequest("POST", "http://google.com", strings.NewReader(testString))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Add("Content-Type", "Raw")
+	contentLength := strconv.Itoa(len(testString))
+	req.Header.Add("Content-Length", contentLength)
+	postData := parsePostData(req)
+	if postData.Text != testString {
+		t.Fatal("Did not get expected text")
+	}
+}
+
 func getTestSendRequest(method string, t *testing.T) (*http.Request, *HarRequest) {
 	data := url.Values{}
 	data.Set("name", "foo")
 	data.Add("surname", "bar")
-	req, _ := http.NewRequest(method, "http://google.com", bytes.NewBufferString(data.Encode()))
-	if req == nil {
-		t.Errorf("Failure creating request")
+	req, err := http.NewRequest(method, "http://google.com", bytes.NewBufferString(data.Encode()))
+	if err != nil {
+		t.Fatal(err)
 	}
 	contentType := "application/x-www-form-urlencoded"
 	req.Header.Add("Content-Type", contentType)
