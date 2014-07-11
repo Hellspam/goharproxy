@@ -4,9 +4,21 @@ Alternative to [browsermob-proxy](https://github.com/lightbody/browsermob-proxy)
 
 [![Build Status](https://travis-ci.org/Hellspam/go-selenium-proxy.svg?branch=master)](https://travis-ci.org/Hellspam/go-selenium-proxy)
 
-Eventually should have these features as a base to start using it from:
-- Create new proxies
-- Serve HAR files for each created proxy 
-- Remap hosts to different ips / host names
+Features
+========
 
-That's it for now. Hopefully i'll hack this along in the coming weeks.
+Supports creating new proxies, serving HAR logs, and remapping hosts.
+
+- Create proxy: POST /proxy
+  - Returns : ```{ "port": [portNumber] }```
+
+- Get HAR: PUT /proxy/[portNumber]/har
+  - Returns HAR log in json, and clears previous entries
+  
+- Remapping hosts: POST /proxy/[portNumber]/hosts
+  - Expects json containing array of : ```{ "Host" : [oldHost], "NewHost" : [newHost] }```
+  - Supports IP / host name
+
+- Delete Proxy: DELETE /proxy/[portNumber]
+
+Currently does not fill whole HAR - timings contain only timing between request start and response end.
