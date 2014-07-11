@@ -123,6 +123,32 @@ func TestHarProxyServerGetInvalidProxy(t *testing.T) {
 	}
 }
 
+func TestHarProxyServerSendInvalidProxyMessage(t *testing.T) {
+	testClient, harProxyServer := newProxyTestServer()
+	defer harProxyServer.Close()
+
+	proxyServerPort, _ := getProxiedClient(t, harProxyServer, testClient)
+	proxyServerHarUrl := fmt.Sprintf("%v/proxy/%v/bla", harProxyServer.URL, proxyServerPort.Port)
+	req , reqErr := http.NewRequest("PUT", proxyServerHarUrl, nil)
+	if reqErr != nil {
+		t.Fatal(reqErr)
+	}
+	resp, respErr := testClient.Do(req)
+	if respErr != nil {
+		t.Fatal(respErr)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatal("Did not get 404 status code")
+	}
+
+	var proxyErrorMessage *ProxyServerErr = new(ProxyServerErr)
+	json.NewDecoder(resp.Body).Decode(proxyErrorMessage)
+
+	if proxyErrorMessage.Error != "No such path [/bla] with method PUT" {
+		t.Fatal("Did not get expected error message")
+	}
+}
+
 func TestHarProxyServerGetProxyAndEntries(t *testing.T) {
 	testClient, harProxyServer := newProxyTestServer()
 	defer harProxyServer.Close()
