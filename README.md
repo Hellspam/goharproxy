@@ -4,9 +4,9 @@ Alternative to [browsermob-proxy](https://github.com/lightbody/browsermob-proxy)
 
 [![Build Status](https://travis-ci.org/Hellspam/go-selenium-proxy.svg?branch=master)](https://travis-ci.org/Hellspam/go-selenium-proxy)
 
-Eventually should have these features as a base to start using it from:
-- Create new proxies
-- Serve HAR files for each created proxy 
-- Remap hosts to different ips / host names
+Features
+========
 
-That's it for now. Hopefully i'll hack this along in the coming weeks.
+Supports creating new proxies, serving har files, and remapping hosts.
+
+Currently does not fill whole har - timings contain only timing between request start and response end.
