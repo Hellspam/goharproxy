@@ -18,7 +18,7 @@ func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
-	harproxy.NewProxyServer(*port)
+	goharproxy.NewProxyServer(*port)
 }
 
 
