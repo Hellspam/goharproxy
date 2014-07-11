@@ -87,13 +87,38 @@ func TestHarProxyServerSendInvalidMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatal("Did not get 500 status code")
+		t.Fatal("Did not get 404 status code")
 	}
 
 	var proxyErrorMessage *ProxyServerErr = new(ProxyServerErr)
 	json.NewDecoder(resp.Body).Decode(proxyErrorMessage)
 
 	if proxyErrorMessage.Error != fmt.Sprintf("No such path: [%v]", "/bla") {
+		t.Fatal("Did not get expected error message")
+	}
+}
+
+func TestHarProxyServerGetInvalidProxy(t *testing.T) {
+	testClient, harProxyServer := newProxyTestServer()
+	defer harProxyServer.Close()
+
+	proxyServerHarUrl := fmt.Sprintf("%v/proxy/%v/har", harProxyServer.URL, 9999)
+	req , err := http.NewRequest("PUT", proxyServerHarUrl, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, respErr := testClient.Do(req)
+	if respErr != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatal("Did not get 404 status code")
+	}
+
+	var proxyErrorMessage *ProxyServerErr = new(ProxyServerErr)
+	json.NewDecoder(resp.Body).Decode(proxyErrorMessage)
+
+	if proxyErrorMessage.Error != fmt.Sprintf("No proxy for port [%v]", 9999) {
 		t.Fatal("Did not get expected error message")
 	}
 }
