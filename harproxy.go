@@ -20,6 +20,8 @@ import (
 
 // HarProxy
 
+var Verbosity bool
+
 type HarProxy struct {
 	// Our go proxy
 	Proxy *goproxy.ProxyHttpServer
@@ -77,7 +79,7 @@ func NewHarProxyWithPort(port int) *HarProxy {
 
 func createProxy(proxy *HarProxy) {
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
-	proxy.Proxy.Verbose = true
+	proxy.Proxy.Verbose = Verbosity
 	proxy.Proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		harEntry := new(HarEntry)
 		harEntry.StartedDateTime = time.Now()
