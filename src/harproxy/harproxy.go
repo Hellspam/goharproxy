@@ -11,11 +11,11 @@ import (
 	"strings"
 	"regexp"
 	"fmt"
+	"encoding/json"
 
 
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/transport"
-	"encoding/json"
 )
 
 // HarProxy
@@ -32,7 +32,11 @@ type HarProxy struct {
 
 	// Stoppable listner - used to stop http proxy
 	StoppableListener *stoppableListener
+
+	isDone chan bool
 }
+
+var startingEntrySize int = 1000
 
 
 func orPanic(err error) {
@@ -67,8 +71,23 @@ func NewHarProxyWithPort(port int) *HarProxy {
 }
 
 func makeNewEntries() []HarEntry {
-	return make([]HarEntry, 0, 100000)
+	return make([]HarEntry, 0, startingEntrySize)
 }
+
+func appendEntry(entries []HarEntry, entry ...HarEntry) []HarEntry {
+	m := len(entries)
+	n := m + len(entry)
+	if n > cap(entries) { // if necessary, reallocate
+		// allocate double what's needed, for future growth.
+		newEntries := make([]HarEntry, (n+1)*2)
+		copy(newEntries, entries)
+		entries = newEntries
+	}
+	entries = entries[0:n]
+	copy(entries[m:n], entry)
+	return entries
+}
+
 
 func createProxy(proxy *HarProxy) {
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
@@ -83,7 +102,7 @@ func createProxy(proxy *HarProxy) {
 			harEntry.Response = harResponse
 			after := time.Now()
 			harEntry.Time = after.Sub(before).Nanoseconds() / 1e6
-			proxy.Entries = append(proxy.Entries, *harEntry)
+			proxy.Entries = appendEntry(proxy.Entries, *harEntry)
 			return
 		})
 		harRequest := ParseRequest(req)
@@ -107,16 +126,27 @@ func (proxy *HarProxy) Start() {
 		log.Fatal("listen:", err)
 	}
 	proxy.StoppableListener = newStoppableListener(l)
-	log.Printf("Starting harproxy server on port :%v", GetPort(l))
-	go http.Serve(proxy.StoppableListener, proxy.Proxy)
-	log.Printf("Stared harproxy server on port :%v", GetPort(l))
+	proxy.Port = GetPort(l)
+	log.Printf("Starting harproxy server on port :%v", proxy.Port)
+	proxy.isDone = make(chan bool)
+	go func() {
+		http.Serve(proxy.StoppableListener, proxy.Proxy)
+		log.Printf("Done serving proxy on port: %v", proxy.Port)
+		proxy.isDone <- true
+	}()
+	log.Printf("Stared harproxy server on port :%v", proxy.Port)
 }
 
 func (proxy *HarProxy) Stop() {
 	log.Printf("Stopping harproxy server on port :%v", proxy.Port)
 	proxy.StoppableListener.Add(1)
 	proxy.StoppableListener.Close()
+	<-proxy.isDone
 	proxy.StoppableListener.Done()
+	proxy.Entries = nil
+	proxy.Proxy = nil
+	proxy.StoppableListener = nil
+	proxy = nil
 }
 
 func (proxy *HarProxy) ClearEntries() {
