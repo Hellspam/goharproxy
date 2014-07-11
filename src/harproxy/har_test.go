@@ -27,6 +27,41 @@ func TestParseHttpGETRequest (t *testing.T) {
 	}
 }
 
+func TestParseIpString (t *testing.T) {
+
+	req, _ := http.NewRequest("GET", "http://google.com", nil)
+	if req == nil {
+		t.Errorf("Failure creating request")
+	}
+
+	expectedReq := HarRequest{
+		Method 		: "GET",
+		Url    		: "http://google.com",
+		BodySize 	: 0,
+	}
+
+	if harReq := parseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
+		t.Errorf("Expected:\n %v \n\n Actual:\n %v \n\n", expectedReq, harReq)
+	}
+}
+
+func TestParseHttpIpGETRequest (t *testing.T) {
+	req, _ := http.NewRequest("GET", "http://google.com", nil)
+	if req == nil {
+		t.Errorf("Failure creating request")
+	}
+
+	expectedReq := HarRequest{
+		Method 		: "GET",
+		Url    		: "http://google.com",
+		BodySize 	: 0,
+	}
+
+	if harReq := parseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
+		t.Errorf("Expected:\n %v \n\n Actual:\n %v \n\n", expectedReq, harReq)
+	}
+}
+
 func TestParseHttpPOSTRequest (t *testing.T) {
 	req, expectedReq := getTestSendRequest("POST", t)
 	captureContent = true

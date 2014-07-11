@@ -2,7 +2,6 @@ package harproxy
 
 import (
 	"time"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -37,16 +36,8 @@ func newHarLog() *HarLog {
 	return &harLog
 }
 
-func (harLog *HarLog) addEntry(entry HarEntry) {
-	harLog.Entries = appendEntry(harLog.Entries, entry)
-}
-
-
-func makeNewEntries() []HarEntry {
-	return make([]HarEntry, 0, startingEntrySize)
-}
-
-func appendEntry(entries []HarEntry, entry ...HarEntry) []HarEntry {
+func (harLog *HarLog) addEntry(entry ...HarEntry) {
+	entries := harLog.Entries
 	m := len(entries)
 	n := m + len(entry)
 	if n > cap(entries) { // if necessary, reallocate
@@ -57,8 +48,13 @@ func appendEntry(entries []HarEntry, entry ...HarEntry) []HarEntry {
 	}
 	entries = entries[0:n]
 	copy(entries[m:n], entry)
-	return entries
+	harLog.Entries = entries
 }
+
+func makeNewEntries() []HarEntry {
+	return make([]HarEntry, 0, startingEntrySize)
+}
+
 
 type HarPage struct {
 	Id              string			`json:"id"`
@@ -76,11 +72,6 @@ type HarEntry struct {
 	Timings         HarTimings		`json:"timings"`
 	ServerIpAddress string			`json:"serverIpAddress"`
 	Connection      string			`json:"connection"`
-}
-
-func (hr *HarEntry) String() string {
-	str, _ := json.MarshalIndent(hr, "", "\t")
-	return string(str)
 }
 
 type HarRequest struct {
@@ -207,12 +198,6 @@ func parseCookies(cookies []*http.Cookie) []HarCookie {
 	return harCookies
 }
 
-
-func (hr *HarRequest) String() string {
-	str, _ := json.MarshalIndent(hr, "", "\t")
-	return string(str)
-}
-
 type HarResponse struct {
 	Status             int					`json:"status"`
 	StatusText         string				`json:"statusText"`
@@ -269,11 +254,6 @@ func parseContent(resp *http.Response) *HarContent{
 	harContent.Text = string(body)
 	resp.Body = ioutil.NopCloser(buffer)
 	return harContent
-}
-
-func (hr *HarResponse) String() string {
-	str, _ := json.MarshalIndent(hr, "", "\t")
-	return string(str)
 }
 
 type HarCookie struct {
