@@ -12,7 +12,6 @@ import (
 	"bytes"
 )
 
-var maxBufferLen int = 10485760
 var startingEntrySize int = 1000
 
 type Har struct {
@@ -138,7 +137,7 @@ func parsePostData(req *http.Request) *HarPostData {
 		}
 	}()
 
-	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferLen))
+	buffer := bytes.NewBuffer(make([]byte, 0, req.ContentLength))
 	io.Copy(buffer, req.Body)
 	e := req.ParseForm()
 	if e != nil {
@@ -263,7 +262,7 @@ func parseContent(resp *http.Response) *HarContent{
 	}
 	harContent.MimeType = contentType[0]
 
-	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferLen))
+	buffer := bytes.NewBuffer(make([]byte, 0, resp.ContentLength))
 	io.Copy(buffer, resp.Body)
 	body, _ := ioutil.ReadAll(resp.Body)
 
