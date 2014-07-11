@@ -18,7 +18,8 @@ Supports creating new proxies, serving HAR logs, and remapping hosts.
   - Returns HAR log in json, and clears previous entries
   
 - Remapping hosts: POST /proxy/[portNumber]/hosts
-  - Expects json containing array of { "Host" : [oldHost], "NewHost" : [newHost] }
+  - Expects json containing array of :
+           ```{ "Host" : [oldHost], "NewHost" : [newHost] }```
   - Supports IP / host name
 
 - Delete Proxy: DELETE /proxy/[portNumber]
