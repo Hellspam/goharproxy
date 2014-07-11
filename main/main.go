@@ -1,9 +1,10 @@
 package main
 
 import (
-	"harproxy"
 	"log"
 	"net/http"
+	
+	"github.com/Hellspam/goharproxy"
 )
 import (
 	_ "net/http/pprof"

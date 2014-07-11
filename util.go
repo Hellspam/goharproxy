@@ -1,4 +1,4 @@
-package harproxy
+package goharproxy
 
 import (
 	"net"
