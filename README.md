@@ -10,16 +10,13 @@ Features
 Supports creating new proxies, serving HAR logs, and remapping hosts.
 
 - Create proxy: POST /proxy
-  - Returns :
-          
-        ```{ "port": [portNumber] }```
+  - Returns : ```{ "port": [portNumber] }```
 
 - Get HAR: PUT /proxy/[portNumber]/har
   - Returns HAR log in json, and clears previous entries
   
 - Remapping hosts: POST /proxy/[portNumber]/hosts
-  - Expects json containing array of :
-           ```{ "Host" : [oldHost], "NewHost" : [newHost] }```
+  - Expects json containing array of : ```{ "Host" : [oldHost], "NewHost" : [newHost] }```
   - Supports IP / host name
 
 - Delete Proxy: DELETE /proxy/[portNumber]
