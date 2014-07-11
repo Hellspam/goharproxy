@@ -7,6 +7,18 @@ Alternative to [browsermob-proxy](https://github.com/lightbody/browsermob-proxy)
 Features
 ========
 
-Supports creating new proxies, serving har files, and remapping hosts.
+Supports creating new proxies, serving HAR logs, and remapping hosts.
 
-Currently does not fill whole har - timings contain only timing between request start and response end.
+- Create proxy: POST /proxy
+  - Returns { "port": [portNumber] }
+
+- Get HAR: PUT /proxy/[portNumber]/har
+  - Returns HAR log in json, and clears previous entries
+  
+- Remapping hosts: POST /proxy/[portNumber]/hosts
+  - Expects json containing array of { "Host" : [oldHost], "NewHost" : [newHost] }
+  - Supports IP / host name
+
+- Delete Proxy: DELETE /proxy/[portNumber]
+
+Currently does not fill whole HAR - timings contain only timing between request start and response end.
