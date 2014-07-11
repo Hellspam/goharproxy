@@ -2,6 +2,3 @@
 .idea/
 *.iml
 *.iws
-
-# GitHub files
-src/github.com
