@@ -13,14 +13,52 @@ import (
 )
 
 var maxBufferLen int = 10485760
+var startingEntrySize int = 1000
 
 type Har struct {
 	HarLog HarLog	`json:"harLog"`
 }
 
 type HarLog struct {
+	Version string			`json:"version"`
+	Creator string			`json:"creator"`
+	Browser string			`json:"browser"`
 	Pages   []HarPage		`json:"pages"`
 	Entries []HarEntry		`json:"entries"`
+}
+
+func newHarLog() *HarLog {
+	harLog := HarLog {
+		Version : "1.2",
+		Creator : "GoHarProxy 0.1",
+		Browser : "",
+		Pages 	: make([]HarPage, 0, 10),
+		Entries : makeNewEntries(),
+	}
+	return &harLog
+}
+
+func (harLog *HarLog) addEntry(entry HarEntry) {
+	harLog.Entries = appendEntry(harLog.Entries, entry)
+}
+
+
+func makeNewEntries() []HarEntry {
+	return make([]HarEntry, 0, startingEntrySize)
+}
+
+func appendEntry(entries []HarEntry, entry ...HarEntry) []HarEntry {
+	m := len(entries)
+	n := m + len(entry)
+	if n > cap(entries) { // if necessary, reallocate
+		// allocate double what's needed, for future growth.
+		newEntries := make([]HarEntry, (n+1)*2)
+		copy(newEntries, entries)
+		entries = newEntries
+	}
+	entries = entries[0:n]
+	copy(entries[m:n], entry)
+	return entries
 }
 
 type HarPage struct {
@@ -60,7 +98,7 @@ type HarRequest struct {
 
 var captureContent bool = false
 
-func ParseRequest(req *http.Request) *HarRequest {
+func parseRequest(req *http.Request) *HarRequest {
 	if req == nil {
 		return nil
 	}
@@ -99,6 +137,7 @@ func parsePostData(req *http.Request) *HarPostData {
 			log.Printf("Error parsing request to %v: %v\n", req.URL, e)
 		}
 	}()
+
 	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferLen))
 	io.Copy(buffer, req.Body)
 	e := req.ParseForm()
@@ -187,7 +226,7 @@ type HarResponse struct {
 	HeadersSize        int64				`json:"headersSize"`
 }
 
-func ParseResponse(resp *http.Response) *HarResponse {
+func parseResponse(resp *http.Response) *HarResponse {
 	if resp == nil {
 		return nil
 	}

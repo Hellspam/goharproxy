@@ -24,27 +24,26 @@ type HarProxy struct {
 	// Our go proxy
 	Proxy *goproxy.ProxyHttpServer
 
-	// Our port
+	// The port our proxy is listening on
 	Port int
 
-	// Our HAR entries channel
-	Entries []HarEntry
+	// Our HAR log.
+	// Starting size of 1000 entries, enlarged if necessary
+	// Read the specification here: http://www.softwareishard.com/blog/har-12-spec/
+	HarLog *HarLog
 
-	// Stoppable listner - used to stop http proxy
+	// Stoppable listener - used to stop http proxy
 	StoppableListener *stoppableListener
 
+	// This channel is used to signal when the http.Serve function is done serving our proxy
 	isDone chan bool
 }
-
-var startingEntrySize int = 1000
-
 
 func orPanic(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
-
 
 type stoppableListener struct {
 	net.Listener
@@ -64,28 +63,10 @@ func NewHarProxyWithPort(port int) *HarProxy {
 	harProxy := HarProxy {
 		Proxy : goproxy.NewProxyHttpServer(),
 		Port : port,
-		Entries: makeNewEntries(),
+		HarLog : newHarLog(),
 	}
 	createProxy(&harProxy)
 	return &harProxy
-}
-
-func makeNewEntries() []HarEntry {
-	return make([]HarEntry, 0, startingEntrySize)
-}
-
-func appendEntry(entries []HarEntry, entry ...HarEntry) []HarEntry {
-	m := len(entries)
-	n := m + len(entry)
-	if n > cap(entries) { // if necessary, reallocate
-		// allocate double what's needed, for future growth.
-		newEntries := make([]HarEntry, (n+1)*2)
-		copy(newEntries, entries)
-		entries = newEntries
-	}
-	entries = entries[0:n]
-	copy(entries[m:n], entry)
-	return entries
 }
 
 
@@ -98,14 +79,14 @@ func createProxy(proxy *HarProxy) {
 		before := time.Now()
 		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
 			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
-			harResponse := ParseResponse(resp)
+			harResponse := parseResponse(resp)
 			harEntry.Response = harResponse
 			after := time.Now()
 			harEntry.Time = after.Sub(before).Nanoseconds() / 1e6
-			proxy.Entries = appendEntry(proxy.Entries, *harEntry)
+			proxy.HarLog.addEntry(*harEntry)
 			return
 		})
-		harRequest := ParseRequest(req)
+		harRequest := parseRequest(req)
 		harEntry.Request = harRequest
 		if ip, _, err := net.ParseCIDR(req.URL.Host); err == nil {
 			harEntry.ServerIpAddress = string(ip)
@@ -143,19 +124,16 @@ func (proxy *HarProxy) Stop() {
 	proxy.StoppableListener.Close()
 	<-proxy.isDone
 	proxy.StoppableListener.Done()
-	proxy.Entries = nil
-	proxy.Proxy = nil
-	proxy.StoppableListener = nil
 	proxy = nil
 }
 
 func (proxy *HarProxy) ClearEntries() {
 	log.Printf("Clearing HAR for harproxy server on port :%v", proxy.Port)
-	proxy.Entries = makeNewEntries()
+	proxy.HarLog.Entries = makeNewEntries()
 }
 
 func (proxy *HarProxy) NewHarReader() io.Reader {
-	str, _ := json.Marshal(proxy.Entries)
+	str, _ := json.Marshal(proxy.HarLog)
 	return strings.NewReader(string(str))
 }
 
@@ -206,7 +184,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		createNewHarProxy(w)
 	case strings.HasSuffix(path, "har") && method == "PUT":
 		log.Println("MATCH PRINT")
-		getHarEntries(harProxy, w)
+		getHarLog(harProxy, w)
 	case portPathRegex.MatchString(path) && method == "DELETE":
 		log.Println("MATCH DELETE")
 		deleteHarProxy(port, w)
@@ -224,12 +202,10 @@ func deleteHarProxy(port int, w http.ResponseWriter) {
 
 }
 
-func getHarEntries(harProxy *HarProxy, w http.ResponseWriter) {
+func getHarLog(harProxy *HarProxy, w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/json")
-	entryLen := len(harProxy.Entries)
-	json.NewEncoder(w).Encode(harProxy.Entries)
-	log.Printf("Wrote %v entries", entryLen)
+	json.NewEncoder(w).Encode(harProxy.HarLog)
 	harProxy.ClearEntries()
 
 }

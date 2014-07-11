@@ -37,12 +37,7 @@ func TestHttpHarProxyGetEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var harEntries *[]HarEntry = new([]HarEntry)
-	json.NewDecoder(harProxy.NewHarReader()).Decode(harEntries)
-	log.Printf("Har entries len: %v", len(*harEntries))
-	if len(*harEntries) == 0 {
-		t.Fatal("Didn't get valid har entries")
-	}
+	testLog(t, harProxy.NewHarReader())
 }
 
 // HarProxyServer tests
@@ -74,11 +69,15 @@ func TestHarProxyServerGetProxyAndEntries(t *testing.T) {
 	}
 	resp, err = testClient.Do(req)
 	testResp(t, resp, err)
+	testLog(t, resp.Body)
 
-	var harEntries *[]HarEntry = new([]HarEntry)
-	json.NewDecoder(resp.Body).Decode(harEntries)
-	log.Printf("Har entries len: %v", len(*harEntries))
-	if len(*harEntries) == 0 {
+}
+
+func testLog(t *testing.T, r io.Reader) {
+	var harLog *HarLog = new(HarLog)
+	json.NewDecoder(r).Decode(harLog)
+	log.Printf("Har entries len: %v", len(harLog.Entries))
+	if len(harLog.Entries) == 0 {
 		t.Fatal("Didn't get valid har entries")
 	}
 }

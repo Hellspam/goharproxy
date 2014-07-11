@@ -22,7 +22,7 @@ func TestParseHttpGETRequest (t *testing.T) {
 		BodySize 	: 0,
 	}
 
-	if harReq := ParseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
+	if harReq := parseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
 		t.Errorf("Expected:\n %v \n\n Actual:\n %v \n\n", expectedReq, harReq)
 	}
 }
@@ -30,7 +30,7 @@ func TestParseHttpGETRequest (t *testing.T) {
 func TestParseHttpPOSTRequest (t *testing.T) {
 	req, expectedReq := getTestSendRequest("POST", t)
 	captureContent = true
-	if harReq := ParseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
+	if harReq := parseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
 		t.Errorf("Expected:\n %v \n\n Actual:\n %v \n\n", expectedReq, harReq)
 	}
 }
@@ -38,7 +38,7 @@ func TestParseHttpPOSTRequest (t *testing.T) {
 func TestParseHttpPUTRequest (t *testing.T) {
 	req, expectedReq := getTestSendRequest("PUT", t)
 	captureContent = true
-	if harReq := ParseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
+	if harReq := parseRequest(req); reflect.DeepEqual(expectedReq, harReq) {
 		t.Errorf("Expected:\n %v \n\n Actual:\n %v \n\n", expectedReq, harReq)
 	}
 }
