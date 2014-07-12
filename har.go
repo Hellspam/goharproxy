@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"io"
 	"bytes"
+	"encoding/json"
+	"sync"
 )
 
 var startingEntrySize int = 1000
@@ -34,6 +36,92 @@ func newHarLog() *HarLog {
 		Entries : makeNewEntries(),
 	}
 	return &harLog
+}
+
+func (harLog *HarLog) JsonMarshal() string {
+	var buffer bytes.Buffer
+
+	buffer.WriteString("{")
+	str, _ := json.Marshal(harLog.Version)
+	buffer.WriteString("\"version\": " + string(str) + ",")
+	str, _ = json.Marshal(harLog.Creator)
+	buffer.WriteString("\"creator\": " + string(str) + ",")
+	str, _ = json.Marshal(harLog.Browser)
+	buffer.WriteString("\"browser\": " + string(str) + ",")
+	str, _ = json.Marshal(harLog.Pages)
+	buffer.WriteString("\"pages\": " + string(str) + ",")
+	jsonEncodeEntries(harLog.Entries, &buffer)
+	buffer.WriteString("}")
+	log.Printf("json: \n%v", buffer.String())
+	return buffer.String()
+}
+
+func jsonEncodeEntries(entries []HarEntry, buffer *bytes.Buffer) {
+	log.Println("Entries")
+	buffer.WriteString("\"entries\":[")
+
+	index := genNums(len(entries))
+	encodeRoutines := make([]<-chan string, 10)
+	for i, _ := range encodeRoutines {
+		encodeRoutines[i] = encodeEntry(entries, index)
+	}
+	for entryString := range merge(encodeRoutines) {
+		buffer.WriteString(entryString)
+	}
+	buffer.WriteString("]")
+}
+
+func genNums(len int) <-chan int {
+	out := make(chan int)
+	go func() {
+		for i := 0; i < len; i++ {
+			out <- i
+		}
+		close(out)
+	}()
+	return out
+}
+
+func merge(cs []<-chan string) <-chan string {
+	var wg sync.WaitGroup
+	out := make(chan string)
+
+	// Start an output goroutine for each input channel in cs.  output
+	// copies values from c to out until c is closed, then calls wg.Done.
+	output := func(c <-chan string) {
+		for n := range c {
+			out <- n
+		}
+		wg.Done()
+	}
+	wg.Add(len(cs))
+	for _, c := range cs {
+		go output(c)
+	}
+
+	// Start a goroutine to close out once all the output goroutines are
+	// done.  This must start after the wg.Add call.
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
+}
+
+func encodeEntry(entries []HarEntry, index <-chan int) <-chan string {
+	out := make(chan string)
+	go func() {
+		for i := range index {
+			bytes, _ := json.Marshal(entries[i])
+			str := string(bytes)
+			if len(entries) - 1 != i {
+				str = str + ","
+			}
+			out <- str
+		}
+		close(out)
+	}()
+	return out
 }
 
 func (harLog *HarLog) addEntry(entry ...HarEntry) {

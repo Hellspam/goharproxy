@@ -232,7 +232,7 @@ func deleteHarProxy(port int, w http.ResponseWriter) {
 
 func getHarLog(harProxy *HarProxy, w http.ResponseWriter) {
 	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(harProxy.HarLog)
+	w.Write([]byte(harProxy.HarLog.JsonMarshal()))
 	harProxy.ClearEntries()
 
 }

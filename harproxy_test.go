@@ -155,6 +155,7 @@ func TestHarProxyServerGetProxyAndEntries(t *testing.T) {
 
 	proxyServerPort, proxiedClient := getProxiedClient(t, harProxyServer, testClient)
 	_, err := proxiedClient.Get(srv.URL + "/bobo")
+	_, err = proxiedClient.Get(srv.URL + "/bobo")
 	if err != nil {
 		t.Fatal(err)
 	}
