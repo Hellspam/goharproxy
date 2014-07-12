@@ -22,3 +22,4 @@ Supports creating new proxies, serving HAR logs, and remapping hosts.
 - Delete Proxy: DELETE /proxy/[portNumber]
 
 Currently does not fill whole HAR - timings contain only timing between request start and response end.
+Also does not work with https requests yet.
