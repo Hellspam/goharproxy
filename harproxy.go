@@ -14,8 +14,8 @@ import (
 	"encoding/json"
 
 
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/transport"
+	"github.com/Hellspam/goproxy"
+	"github.com/Hellspam/goproxy/transport"
 )
 
 // HarProxy
