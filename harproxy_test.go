@@ -187,7 +187,6 @@ func TestHarProxyServerGetProxyAndEntriesWithResponseContent(t *testing.T) {
 
 	proxyServerPort, proxiedClient := getProxiedClient(t, harProxyServer, testClient)
 	resp, err := proxiedClient.Get(srv.URL + "/query?result=bla")
-	proxiedClient.Post(srv.URL + "/bobo", "form-data", strings.NewReader("bla"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,9 +209,6 @@ func TestHarProxyServerGetProxyAndEntriesWithResponseContent(t *testing.T) {
 	harLog := testLog(t, resp.Body)
 	if harLog.Entries[0].Response.Content.Text != "bla" {
 		t.Fatal("Expect to get bla in har response")
-	}
-	if harLog.Entries[1].Request.PostData.Text!= "bla" {
-		t.Fatal("Expect to get bla in har request")
 	}
 
 }
