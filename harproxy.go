@@ -12,10 +12,12 @@ import (
 	"regexp"
 	"fmt"
 	"encoding/json"
+	"bytes"
+	"io/ioutil"
 
 
 	"github.com/Hellspam/goproxy"
-	"github.com/Hellspam/goproxy/transport"
+//	"github.com/Hellspam/goproxy/transport"
 )
 
 // HarProxy
@@ -42,6 +44,9 @@ type HarProxy struct {
 
 	// Stores hosts we want to redirect to a different ip / host
 	hostEntries []ProxyHosts
+
+	reqChan chan *http.Request
+	resChan chan *http.Response
 }
 
 func orPanic(err error) {
@@ -71,6 +76,8 @@ func NewHarProxyWithPort(port int) *HarProxy {
 		HarLog 		: newHarLog(),
 		hostEntries : make([]ProxyHosts, 0, 100),
 		isDone 		: make(chan bool),
+		reqChan		: make(chan *http.Request),
+		resChan 	: make(chan *http.Response),
 	}
 	createProxy(&harProxy)
 	return &harProxy
@@ -78,33 +85,83 @@ func NewHarProxyWithPort(port int) *HarProxy {
 
 
 func createProxy(proxy *HarProxy) {
-	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
+//	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	proxy.Proxy.Verbose = Verbosity
+	go processEntriesFunc(proxy)
 	proxy.Proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		harEntry := new(HarEntry)
-		harEntry.StartedDateTime = time.Now()
-		before := time.Now()
-		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
-			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
-			if err != nil {
-				return resp, err
-			}
-			resp, err = handleResponse(resp, harEntry, proxy)
-			after := time.Now()
-			harEntry.Time = after.Sub(before).Nanoseconds() / 1e6
-			proxy.HarLog.addEntry(*harEntry)
-			return
-		})
-		return handleRequest(req, harEntry, proxy)
+		if captureContent && req.ContentLength > 0 {
+			newReq, reqCopy := copyReq(req)
+			req = newReq
+			proxy.reqChan <- reqCopy
+		} else {
+			proxy.reqChan <- req
+		}
+		return handleRequest(req, proxy)
+	})
+	proxy.Proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
+		if captureContent && resp.ContentLength > 0 {
+			newResp, respCopy := copyResp(resp)
+			resp = newResp
+			proxy.resChan <- respCopy
+		} else {
+			proxy.resChan <- resp
+		}
+		return resp
 	})
 }
 
-func handleRequest(req *http.Request, harEntry *HarEntry, harProxy *HarProxy) (*http.Request, *http.Response) {
-	harRequest := parseRequest(req)
-	harEntry.Request = harRequest
-	replaceHost(req, harProxy)
-	fillIpAddress(req, harEntry)
+func copyReq(req *http.Request) (*http.Request, *http.Request) {
+	reqCopy := new(http.Request)
+	*reqCopy = *req
+	req.Body, reqCopy.Body = copyReadCloser(req.Body, req.ContentLength)
+	return req, reqCopy
+}
 
+func copyResp(resp *http.Response) (*http.Response, *http.Response) {
+	respCopy := new(http.Response)
+	*respCopy = *resp
+	resp.Body, respCopy.Body = copyReadCloser(resp.Body, resp.ContentLength)
+	return resp, respCopy
+}
+
+func copyReadCloser(readCloser io.ReadCloser, len int64) (io.ReadCloser, io.ReadCloser) {
+	temp := bytes.NewBuffer(make([]byte, 0, len))
+	teeReader := io.TeeReader(readCloser, temp)
+	copy := bytes.NewBuffer(make([]byte, 0, len))
+	copy.ReadFrom(teeReader)
+	return ioutil.NopCloser(temp), ioutil.NopCloser(copy)
+}
+
+
+
+
+func processEntriesFunc(proxy *HarProxy) {
+entryLoop:
+	for {
+		harEntry := new(HarEntry)
+		select {
+		case req := <-proxy.reqChan:
+			log.Println("GOT REQ", req.URL)
+			harEntry.StartedDateTime = time.Now()
+			harEntry.Request = parseRequest(req)
+			fillIpAddress(req, harEntry)
+		case resp := <-proxy.resChan:
+			log.Println("GOT RESP", resp.Request.URL)
+			harEntry.Response = parseResponse(resp)
+			harEntry.Time = time.Now().Sub(harEntry.StartedDateTime).Nanoseconds() / 1e6
+			proxy.HarLog.addEntry(*harEntry)
+		case <-proxy.isDone:
+			log.Println("GOT DONE SIGNAL")
+			break entryLoop
+		}
+	}
+	close(proxy.reqChan)
+	close(proxy.resChan)
+	log.Println("DONE PROCESSING ENTRIES")
+}
+
+func handleRequest(req *http.Request, harProxy *HarProxy) (*http.Request, *http.Response) {
+	replaceHost(req, harProxy)
 	return req, nil
 }
 
@@ -118,9 +175,6 @@ func replaceHost(req *http.Request, harProxy *HarProxy) {
 }
 
 func handleResponse(resp *http.Response, harEntry *HarEntry, harProxy *HarProxy) (newResp *http.Response, err error) {
-	harResponse := parseResponse(resp)
-	harEntry.Response = harResponse
-
 	return resp, nil
 }
 
@@ -160,6 +214,9 @@ func (proxy *HarProxy) Start() {
 	go func() {
 		http.Serve(proxy.StoppableListener, proxy.Proxy)
 		log.Printf("Done serving proxy on port: %v", proxy.Port)
+
+		// We notify twice to close both the mutex and the process entries routine
+		proxy.isDone <- true
 		proxy.isDone <- true
 	}()
 	log.Printf("Stared harproxy server on port :%v", proxy.Port)

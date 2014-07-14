@@ -7,8 +7,6 @@ import (
 	"strings"
 	"log"
 	"io/ioutil"
-	"io"
-	"bytes"
 )
 
 var startingEntrySize int = 1000
@@ -128,8 +126,6 @@ func parsePostData(req *http.Request) *HarPostData {
 		}
 	}()
 
-	buffer := bytes.NewBuffer(make([]byte, 0, req.ContentLength))
-	io.Copy(buffer, req.Body)
 	harPostData := new(HarPostData)
 	contentType := req.Header["Content-Type"]
 	if contentType == nil {
@@ -150,9 +146,9 @@ func parsePostData(req *http.Request) *HarPostData {
 		}
 		harPostData.Params = params
 	} else {
-		harPostData.Text = string(buffer.Bytes())
+		str, _ := ioutil.ReadAll(req.Body)
+		harPostData.Text = string(str)
 	}
-	req.Body = ioutil.NopCloser(buffer)
 	return harPostData
 }
 
@@ -238,13 +234,13 @@ func parseContent(resp *http.Response) *HarContent{
 		panic("Missing content type in response")
 	}
 	harContent.MimeType = contentType[0]
+	if (resp.ContentLength == 0) {
+		log.Println("Empty content")
+		return nil
+	}
 
-	buffer := bytes.NewBuffer(make([]byte, 0, resp.ContentLength))
-	io.Copy(buffer, resp.Body)
 	body, _ := ioutil.ReadAll(resp.Body)
-
 	harContent.Text = string(body)
-	resp.Body = ioutil.NopCloser(buffer)
 	return harContent
 }
 

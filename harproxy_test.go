@@ -21,7 +21,17 @@ var srv = httptest.NewServer(nil)
 
 func init() {
 	http.DefaultServeMux.Handle("/bobo", ConstantHanlder("bobo"))
+	http.DefaultServeMux.Handle("/query", QueryHandler{})
 	http.DefaultServeMux.Handle("/", ConstantHanlder("google"))
+}
+
+type QueryHandler struct{}
+
+func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		panic(err)
+	}
+	io.WriteString(w, req.Form.Get("result"))
 }
 
 type ConstantHanlder string
@@ -169,6 +179,39 @@ func TestHarProxyServerGetProxyAndEntries(t *testing.T) {
 	testLog(t, resp.Body)
 }
 
+func TestHarProxyServerGetProxyAndEntriesWithContent(t *testing.T) {
+	captureContent = true
+	testClient, harProxyServer := newProxyTestServer()
+	defer harProxyServer.Close()
+
+	proxyServerPort, proxiedClient := getProxiedClient(t, harProxyServer, testClient)
+	resp, err := proxiedClient.Get(srv.URL + "/query?result=bla")
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt, err  := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal("Error reading response body")
+	}
+	if string(txt) != "bla" {
+		t.Fatal("Expect to get bla in response body")
+	}
+
+	proxyServerHarUrl := fmt.Sprintf("%v/proxy/%v/har", harProxyServer.URL, proxyServerPort.Port)
+	req , reqErr := http.NewRequest("PUT", proxyServerHarUrl, nil)
+	if reqErr != nil {
+		t.Fatal(reqErr)
+	}
+	resp, err = testClient.Do(req)
+	testResp(t, resp, err)
+
+	harLog := testLog(t, resp.Body)
+	entry := harLog.Entries[0]
+	if entry.Response.Content.Text != "bla" {
+		t.Fatal("Expect to get bla in har response")
+	}
+}
+
 func TestHarProxyServerGetProxyChangeHost(t *testing.T) {
 	testClient, harProxyServer := newProxyTestServer()
 	defer harProxyServer.Close()
@@ -208,13 +251,14 @@ func getProxiedClient(t *testing.T, harProxyServer *httptest.Server, testClient 
 	return
 }
 
-func testLog(t *testing.T, r io.Reader) {
+func testLog(t *testing.T, r io.Reader) *HarLog{
 	var harLog *HarLog = new(HarLog)
 	json.NewDecoder(r).Decode(harLog)
 	log.Printf("Har entries len: %v", len(harLog.Entries))
 	if len(harLog.Entries) == 0 {
 		t.Fatal("Didn't get valid har entries")
 	}
+	return harLog
 }
 
 func testResp(t *testing.T, resp *http.Response, err error) {
