@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"bytes"
 	"io/ioutil"
+	"strings"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -179,13 +180,14 @@ func TestHarProxyServerGetProxyAndEntries(t *testing.T) {
 	testLog(t, resp.Body)
 }
 
-func TestHarProxyServerGetProxyAndEntriesWithContent(t *testing.T) {
+func TestHarProxyServerGetProxyAndEntriesWithResponseContent(t *testing.T) {
 	captureContent = true
 	testClient, harProxyServer := newProxyTestServer()
 	defer harProxyServer.Close()
 
 	proxyServerPort, proxiedClient := getProxiedClient(t, harProxyServer, testClient)
 	resp, err := proxiedClient.Get(srv.URL + "/query?result=bla")
+	proxiedClient.Post(srv.URL + "/bobo", "form-data", strings.NewReader("bla"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,10 +208,39 @@ func TestHarProxyServerGetProxyAndEntriesWithContent(t *testing.T) {
 	testResp(t, resp, err)
 
 	harLog := testLog(t, resp.Body)
-	entry := harLog.Entries[0]
-	if entry.Response.Content.Text != "bla" {
+	if harLog.Entries[0].Response.Content.Text != "bla" {
 		t.Fatal("Expect to get bla in har response")
 	}
+	if harLog.Entries[1].Request.PostData.Text!= "bla" {
+		t.Fatal("Expect to get bla in har request")
+	}
+
+}
+
+func TestHarProxyServerGetProxyAndEntriesWithRequestPostData(t *testing.T) {
+	captureContent = true
+	testClient, harProxyServer := newProxyTestServer()
+	defer harProxyServer.Close()
+
+	proxyServerPort, proxiedClient := getProxiedClient(t, harProxyServer, testClient)
+	resp, err := proxiedClient.Post(srv.URL + "/bobo", "form-data", strings.NewReader("bla"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	proxyServerHarUrl := fmt.Sprintf("%v/proxy/%v/har", harProxyServer.URL, proxyServerPort.Port)
+	req , reqErr := http.NewRequest("PUT", proxyServerHarUrl, nil)
+	if reqErr != nil {
+		t.Fatal(reqErr)
+	}
+	resp, err = testClient.Do(req)
+	testResp(t, resp, err)
+
+	harLog := testLog(t, resp.Body)
+	if harLog.Entries[0].Request.PostData.Text!= "bla" {
+		t.Fatal("Expect to get bla in har request")
+	}
+
 }
 
 func TestHarProxyServerGetProxyChangeHost(t *testing.T) {
