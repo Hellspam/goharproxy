@@ -38,7 +38,6 @@ func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 type ConstantHanlder string
 
 func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println("bobo")
 	io.WriteString(w, string(h))
 }
 // HarProxy Tests
