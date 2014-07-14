@@ -18,6 +18,7 @@ import (
 
 	"github.com/Hellspam/goproxy"
 	"github.com/Hellspam/goproxy/transport"
+	"time"
 )
 
 // HarProxy
@@ -133,9 +134,6 @@ func copyReadCloser(readCloser io.ReadCloser, len int64) (io.ReadCloser, io.Read
 	return ioutil.NopCloser(temp), ioutil.NopCloser(copy)
 }
 
-
-
-
 func processEntriesFunc(proxy *HarProxy) {
 	for {
 		reqAndResp ,ok := <-proxy.entryChannel
@@ -149,8 +147,6 @@ func processEntriesFunc(proxy *HarProxy) {
 		harEntry.Request = parseRequest(reqAndResp.req)
 		harEntry.Response = parseResponse(reqAndResp.resp)
 		fillIpAddress(reqAndResp.req, harEntry)
-		str, _ := json.Marshal(harEntry)
-		log.Println(string(str))
 		//			harEntry.Time = time.Now().Sub(harEntry.StartedDateTime).Nanoseconds() / 1e6
 		proxy.HarLog.addEntry(*harEntry)
 	}
@@ -241,6 +237,11 @@ func (proxy *HarProxy) NewHarReader() io.Reader {
 	return strings.NewReader(string(str))
 }
 
+func (proxy *HarProxy) WaitForEntries() {
+	for len(proxy.entryChannel) > 0{
+		time.Sleep(1 * time.Second)
+	}
+}
 //
 
 // HarProxyServer
@@ -289,6 +290,7 @@ func deleteHarProxy(port int, w http.ResponseWriter) {
 
 func getHarLog(harProxy *HarProxy, w http.ResponseWriter) {
 	w.Header().Add("Content-Type", "application/json")
+	harProxy.WaitForEntries()
 	json.NewEncoder(w).Encode(harProxy.HarLog)
 	harProxy.ClearEntries()
 
