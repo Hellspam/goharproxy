@@ -234,7 +234,7 @@ func parseContent(resp *http.Response) *HarContent{
 		panic("Missing content type in response")
 	}
 	harContent.MimeType = contentType[0]
-	if (resp.ContentLength == 0) {
+	if (resp.ContentLength <= 0) {
 		log.Println("Empty content")
 		return nil
 	}
