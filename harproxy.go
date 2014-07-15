@@ -149,6 +149,8 @@ func processEntriesFunc(proxy *HarProxy) {
 		//			harEntry.StartedDateTime = time.Now()
 		harEntry.Request = parseRequest(reqAndResp.req)
 		harEntry.Response = parseResponse(reqAndResp.resp)
+		str, _ := json.Marshal(harEntry)
+		log.Println(string(str))
 		fillIpAddress(reqAndResp.req, harEntry)
 		//			harEntry.Time = time.Now().Sub(harEntry.StartedDateTime).Nanoseconds() / 1e6
 		proxy.HarLog.addEntry(*harEntry)
