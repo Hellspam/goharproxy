@@ -237,6 +237,7 @@ func (proxy *HarProxy) ClearEntries() {
 }
 
 func (proxy *HarProxy) NewHarReader() io.Reader {
+	proxy.WaitForEntries()
 	str, _ := json.Marshal(proxy.HarLog)
 	return strings.NewReader(string(str))
 }
