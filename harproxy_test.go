@@ -53,7 +53,9 @@ func TestHttpHarProxyGetIpEntries(t *testing.T) {
 	}
 	harLog := testLog(t, harProxy.NewHarReader())
 	host, _, _ := net.SplitHostPort(testUrl.Host)
-	testIpAddr(t, host, harLog)
+	if harLog.Entries[0].ServerIpAddress != host {
+		t.Fatal("Expected to get host: ", host, " but got: ", harLog.Entries[0].ServerIpAddress)
+	}
 }
 
 func TestHttpHarProxyGetHostEntries(t *testing.T) {
@@ -72,13 +74,8 @@ func TestHttpHarProxyGetHostEntries(t *testing.T) {
 		t.Fatal("Didn't get ip for www.google.com")
 	}
 	harLog := testLog(t, harProxy.NewHarReader())
-	testIpAddr(t, ipaddr[0].String(), harLog)
-}
-
-func testIpAddr(t *testing.T, expected string, harLog *HarLog) {
-	actual := harLog.Entries[0].ServerIpAddress
-	if actual != expected {
-		t.Fatal("Expected to get host: ", expected, " but got: ", actual)
+	if ip := net.ParseIP(harLog.Entries[0].ServerIpAddress); ip == nil {
+		t.Fatal("Expected to get valid ip address in har ServerIpAddress")
 	}
 }
 
