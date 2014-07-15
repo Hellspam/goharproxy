@@ -47,6 +47,7 @@ type HarProxy struct {
 	hostEntries []ProxyHosts
 
 	entryChannel chan reqAndResp
+	entriesInProcess int
 }
 
 func orPanic(err error) {
@@ -71,12 +72,13 @@ func NewHarProxy() *HarProxy {
 
 func NewHarProxyWithPort(port int) *HarProxy {
 	harProxy := HarProxy {
-		Proxy 		: goproxy.NewProxyHttpServer(),
-		Port 		: port,
-		HarLog 		: newHarLog(),
-		hostEntries : make([]ProxyHosts, 0, 100),
-		isDone 		: make(chan bool),
-		entryChannel: make(chan reqAndResp),
+		Proxy 			 : goproxy.NewProxyHttpServer(),
+		Port 			 : port,
+		HarLog 			 : newHarLog(),
+		hostEntries 	 : make([]ProxyHosts, 0, 100),
+		isDone 			 : make(chan bool),
+		entryChannel	 : make(chan reqAndResp),
+		entriesInProcess : 0,
 	}
 	createProxy(&harProxy)
 	return &harProxy
@@ -141,6 +143,7 @@ func processEntriesFunc(proxy *HarProxy) {
 			log.Println("GOT DONE SIGNAL")
 			break
 		}
+		proxy.entriesInProcess += 1
 		log.Println("GOT REQ AND RESP")
 		harEntry := new(HarEntry)
 		//			harEntry.StartedDateTime = time.Now()
@@ -149,6 +152,7 @@ func processEntriesFunc(proxy *HarProxy) {
 		fillIpAddress(reqAndResp.req, harEntry)
 		//			harEntry.Time = time.Now().Sub(harEntry.StartedDateTime).Nanoseconds() / 1e6
 		proxy.HarLog.addEntry(*harEntry)
+		proxy.entriesInProcess -= 1
 	}
 	log.Println("DONE PROCESSING ENTRIES")
 }
@@ -238,7 +242,8 @@ func (proxy *HarProxy) NewHarReader() io.Reader {
 }
 
 func (proxy *HarProxy) WaitForEntries() {
-	for len(proxy.entryChannel) > 0{
+	for len(proxy.entryChannel) > 0 && proxy.entriesInProcess > 0 {
+		log.Println("WAITING FOR ENTRIES TO COMPLETE PROCESSING")
 		time.Sleep(1 * time.Second)
 	}
 }
