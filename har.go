@@ -47,7 +47,7 @@ func (harLog *HarLog) addEntry(entry ...HarEntry) {
 	entries = entries[0:n]
 	copy(entries[m:n], entry)
 	harLog.Entries = entries
-	log.Println("Added entry ", entry.Request.Url)
+	log.Println("Added entry ", entry[0].Request.Url)
 }
 
 func makeNewEntries() []HarEntry {
