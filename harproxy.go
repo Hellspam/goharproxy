@@ -245,7 +245,7 @@ func (proxy *HarProxy) NewHarReader() io.Reader {
 }
 
 func (proxy *HarProxy) WaitForEntries() {
-	for len(proxy.entryChannel) > 0 && proxy.entriesInProcess > 0 {
+	for len(proxy.entryChannel) > 0 || proxy.entriesInProcess > 0 {
 		log.Println("WAITING FOR ENTRIES TO COMPLETE PROCESSING")
 		time.Sleep(1 * time.Second)
 	}
