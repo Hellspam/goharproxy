@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sync"
 	"log"
-	//"time"
 	"strconv"
 	"io"
 	"strings"
@@ -14,11 +13,12 @@ import (
 	"encoding/json"
 	"bytes"
 	"io/ioutil"
+	"time"
 
 
 	"github.com/Hellspam/goproxy"
 	"github.com/Hellspam/goproxy/transport"
-	"time"
+
 )
 
 // HarProxy
@@ -46,7 +46,13 @@ type HarProxy struct {
 	// Stores hosts we want to redirect to a different ip / host
 	hostEntries []ProxyHosts
 
+
+	// We use this channel to receive a request and response from the proxy.
+	// We don't separate this into 2 channels because we want the specific request for our response
+	// to arrive at the same time.
 	entryChannel chan reqAndResp
+
+	// This is the count of entries we are currently waiting to finish processing
 	entriesInProcess int
 }
 
@@ -85,8 +91,10 @@ func NewHarProxyWithPort(port int) *HarProxy {
 }
 
 type reqAndResp struct {
-	req *http.Request
-	resp *http.Response
+	req 	*http.Request
+	start 	 time.Time
+	resp 	*http.Response
+	end   	 time.Time
 }
 
 func createProxy(proxy *HarProxy) {
@@ -94,13 +102,15 @@ func createProxy(proxy *HarProxy) {
 	proxy.Proxy.Verbose = Verbosity
 	go processEntriesFunc(proxy)
 	proxy.Proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		reqAndResp := new(reqAndResp)
+		reqAndResp.start = time.Now()
+		if captureContent && req.ContentLength > 0 {
+			req, reqAndResp.req = copyReq(req)
+		} else {
+			reqAndResp.req = req
+		}
 		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
-			reqAndResp := new(reqAndResp)
-			if captureContent && req.ContentLength > 0 {
-				req, reqAndResp.req = copyReq(req)
-			} else {
-				reqAndResp.req = req
-			}
+			reqAndResp.end = time.Now()
 			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
 			if captureContent && resp.ContentLength > 0 {
 				resp, reqAndResp.resp = copyResp(resp)
@@ -144,17 +154,16 @@ func processEntriesFunc(proxy *HarProxy) {
 			break
 		}
 		proxy.entriesInProcess += 1
-		log.Println("GOT REQ AND RESP")
-		harEntry := new(HarEntry)
-		//			harEntry.StartedDateTime = time.Now()
-		harEntry.Request = parseRequest(reqAndResp.req)
-		harEntry.Response = parseResponse(reqAndResp.resp)
-		str, _ := json.Marshal(harEntry)
-		log.Println(string(str))
-		fillIpAddress(reqAndResp.req, harEntry)
-		//			harEntry.Time = time.Now().Sub(harEntry.StartedDateTime).Nanoseconds() / 1e6
-		proxy.HarLog.addEntry(*harEntry)
-		proxy.entriesInProcess -= 1
+		go func() {
+			harEntry := new(HarEntry)
+			harEntry.Request = parseRequest(reqAndResp.req)
+			harEntry.StartedDateTime = reqAndResp.start
+			harEntry.Response = parseResponse(reqAndResp.resp)
+			harEntry.Time = reqAndResp.end.Sub(reqAndResp.start).Nanoseconds() / 1e6
+			fillIpAddress(reqAndResp.req, harEntry)
+			proxy.HarLog.addEntry(*harEntry)
+			proxy.entriesInProcess -= 1
+		}()
 	}
 	log.Println("DONE PROCESSING ENTRIES")
 }
@@ -179,12 +188,21 @@ func handleResponse(resp *http.Response, harEntry *HarEntry, harProxy *HarProxy)
 }
 
 func fillIpAddress(req *http.Request, harEntry *HarEntry) {
-	if ip, _, err := net.ParseCIDR(req.URL.Host); err == nil {
+	host, _, err := net.SplitHostPort(req.URL.Host)
+	if err != nil {
+		host = req.URL.Host
+	}
+	if ip := net.ParseIP(host); ip != nil {
 		harEntry.ServerIpAddress = string(ip)
 	}
 
-	if ipaddr, err := net.LookupIP(req.URL.Host); err == nil {
-		harEntry.ServerIpAddress = ipaddr[0].String()
+	if ipaddr, err := net.LookupIP(host); err == nil  {
+		for _, ip := range ipaddr {
+			if ip.To4() != nil {
+				harEntry.ServerIpAddress = ip.String()
+				return
+			}
+		}
 	}
 }
 
@@ -245,9 +263,14 @@ func (proxy *HarProxy) NewHarReader() io.Reader {
 }
 
 func (proxy *HarProxy) WaitForEntries() {
+	secs := 0
 	for len(proxy.entryChannel) > 0 || proxy.entriesInProcess > 0 {
-		log.Println("WAITING FOR ENTRIES TO COMPLETE PROCESSING")
+		log.Println("WAITING FOR ENTRIES")
 		time.Sleep(1 * time.Second)
+		secs++
+		if secs > 10 {
+			log.Printf("GIVING UP WAITING FOR ENTRIES AFTER %v SECONDS", secs)
+		}
 	}
 }
 //
@@ -299,6 +322,8 @@ func deleteHarProxy(port int, w http.ResponseWriter) {
 func getHarLog(harProxy *HarProxy, w http.ResponseWriter) {
 	w.Header().Add("Content-Type", "application/json")
 	harProxy.WaitForEntries()
+	str, _ := json.Marshal(harProxy.HarLog)
+	log.Println("Entry:", string(str))
 	json.NewEncoder(w).Encode(harProxy.HarLog)
 	harProxy.ClearEntries()
 

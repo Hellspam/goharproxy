@@ -46,11 +46,14 @@ func TestHttpHarProxyGetIpEntries(t *testing.T) {
 	client, harProxy, s := oneShotProxy()
 	defer s.Close()
 
-	_, err := client.Get(srv.URL + "/bobo")
+	testUrl , _ := url.Parse(srv.URL + "/bobo")
+	_, err := client.Get(testUrl.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	testLog(t, harProxy.NewHarReader())
+	harLog := testLog(t, harProxy.NewHarReader())
+	host, _, _ := net.SplitHostPort(testUrl.Host)
+	testIpAddr(t, host, harLog)
 }
 
 func TestHttpHarProxyGetHostEntries(t *testing.T) {
@@ -61,7 +64,22 @@ func TestHttpHarProxyGetHostEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testLog(t, harProxy.NewHarReader())
+	ipaddr, ipErr := net.LookupIP("www.google.com")
+	if ipErr != nil {
+		t.Fatal(ipErr)
+	}
+	if len(ipaddr) == 0 {
+		t.Fatal("Didn't get ip for www.google.com")
+	}
+	harLog := testLog(t, harProxy.NewHarReader())
+	testIpAddr(t, ipaddr[0].String(), harLog)
+}
+
+func testIpAddr(t *testing.T, expected string, harLog *HarLog) {
+	actual := harLog.Entries[0].ServerIpAddress
+	if actual != expected {
+		t.Fatal("Expected to get host: ", expected, " but got: ", actual)
+	}
 }
 
 // HarProxyServer tests
