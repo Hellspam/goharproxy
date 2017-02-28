@@ -1,23 +1,24 @@
 package goharproxy
 
 import (
-	"bytes"
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
-	"regexp"
-	"strconv"
-	"strings"
 	"sync"
+	"log"
+	"strconv"
+	"io"
+	"strings"
+	"regexp"
+	"fmt"
+	"encoding/json"
+	"bytes"
+	"io/ioutil"
 	"time"
 
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/transport"
+
+	"github.com/Hellspam/goproxy"
+	"github.com/Hellspam/goproxy/transport"
+
 )
 
 // HarProxy
@@ -76,31 +77,30 @@ func NewHarProxy() *HarProxy {
 }
 
 func NewHarProxyWithPort(port int) *HarProxy {
-	harProxy := HarProxy{
-		Proxy:            goproxy.NewProxyHttpServer(),
-		Port:             port,
-		HarLog:           newHarLog(),
-		hostEntries:      make([]ProxyHosts, 0, 100),
-		isDone:           make(chan bool),
-		entryChannel:     make(chan reqAndResp),
-		entriesInProcess: 0,
+	harProxy := HarProxy {
+		Proxy 			 : goproxy.NewProxyHttpServer(),
+		Port 			 : port,
+		HarLog 			 : newHarLog(),
+		hostEntries 	 : make([]ProxyHosts, 0, 100),
+		isDone 			 : make(chan bool),
+		entryChannel	 : make(chan reqAndResp),
+		entriesInProcess : 0,
 	}
 	createProxy(&harProxy)
 	return &harProxy
 }
 
 type reqAndResp struct {
-	req   *http.Request
-	start time.Time
-	resp  *http.Response
-	end   time.Time
+	req 	*http.Request
+	start 	 time.Time
+	resp 	*http.Response
+	end   	 time.Time
 }
 
 func createProxy(proxy *HarProxy) {
-	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment, TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	proxy.Proxy.Verbose = Verbosity
 	go processEntriesFunc(proxy)
-	proxy.Proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.Proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		reqAndResp := new(reqAndResp)
 		reqAndResp.start = time.Now()
